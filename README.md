@@ -15,7 +15,7 @@
 ---
 
 # Project Overview
-
+ 
 **Signal Intelligence** is an AI-powered financial document analysis platform that ingests SEC filings (10-K, 10-Q) and earnings call transcripts, automatically extracts structured financial data, analyzes management tone, identifies risk factors, benchmarks competitors, and generates institutional-grade investment memos.
 
 The system handles:
