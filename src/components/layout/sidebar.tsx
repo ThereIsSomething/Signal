@@ -16,7 +16,10 @@ import {
   FlaskConical,
   Building2,
   Activity,
+  Info
 } from "lucide-react";
+
+import { HowItWorksModal } from "@/components/ui/how-it-works-modal";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -33,9 +36,12 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const [isHowItWorksOpen, setIsHowItWorksOpen] = React.useState(false);
 
   return (
-    <aside
+    <>
+      <HowItWorksModal isOpen={isHowItWorksOpen} onClose={() => setIsHowItWorksOpen(false)} />
+      <aside
       className={`
         flex flex-col border-r border-border-default bg-surface-secondary
         transition-all duration-200 ease-out shrink-0
@@ -85,6 +91,23 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
         })}
       </nav>
 
+      {/* Info / How it Works Button */}
+      <div className="px-2 py-2">
+        <button
+          onClick={() => setIsHowItWorksOpen(true)}
+          className={`
+            flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5
+            text-[13px] font-medium transition-colors text-text-secondary 
+            hover:bg-surface-tertiary hover:text-text-primary
+            ${collapsed ? "justify-center" : ""}
+          `}
+          title={collapsed ? "How it Works" : undefined}
+        >
+          <Info className="h-4 w-4 shrink-0" />
+          {!collapsed && <span className="truncate">How it Works</span>}
+        </button>
+      </div>
+
       {/* Collapse Toggle */}
       <div className="border-t border-border-default p-2">
         <button
@@ -102,5 +125,6 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
         </button>
       </div>
     </aside>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { Dropzone } from "@/components/documents/dropzone";
 import { DocumentList } from "@/components/documents/document-list";
+import { HowItWorksModal } from "@/components/ui/how-it-works-modal";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { UploadMetadata } from "@/components/documents/dropzone";
@@ -22,6 +23,7 @@ import {
   BarChart3,
   Plus,
   Activity,
+  Info,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -35,6 +37,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentDocs, setRecentDocs] = useState<DocumentWithCompanyJoin[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
   const supabase = createClient();
   const router = useRouter();
 
@@ -163,6 +166,7 @@ export default function DashboardPage() {
         </Button>
       }
     >
+      <HowItWorksModal isOpen={isHowItWorksOpen} onClose={() => setIsHowItWorksOpen(false)} />
       <div className="p-6 space-y-8 max-w-6xl mx-auto">
         {/* Hero Branding Section */}
         <div className="flex flex-col items-center justify-center text-center py-8 space-y-4">
@@ -175,6 +179,16 @@ export default function DashboardPage() {
           <p className="text-lg text-text-secondary max-w-2xl font-light">
             Advanced Financial Analysis & AI Document Processing
           </p>
+          <div className="pt-2">
+            <Button 
+               variant="ghost" 
+               size="sm" 
+               icon={<Info className="h-4 w-4" />}
+               onClick={() => setIsHowItWorksOpen(true)}
+            >
+              See how it works
+            </Button>
+          </div>
         </div>
 
         {/* Stats Grid */}
