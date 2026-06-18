@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Companies", href: "/companies", icon: Building2 },
   { label: "Documents", href: "/documents", icon: FileText },
   { label: "Benchmarks", href: "/benchmarks", icon: BarChart3 },
