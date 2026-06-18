@@ -13,7 +13,7 @@ export default function NotFound() {
       <p className="text-text-secondary mb-6">
         The page you&apos;re looking for doesn&apos;t exist.
       </p>
-      <Link href="/">
+      <Link href="/dashboard">
         <Button variant="secondary" icon={<ArrowLeft className="h-3.5 w-3.5" />}>
           Back to Dashboard
         </Button>

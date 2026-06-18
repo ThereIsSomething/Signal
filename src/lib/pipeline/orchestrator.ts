@@ -37,7 +37,16 @@ import type {
   MetricValue,
 } from "@/lib/utils/types";
 
-const supabase = createAdminClient();
+// Lazily initialize Supabase admin client to prevent build-time environment key validation errors
+let _supabase: ReturnType<typeof createAdminClient> | null = null;
+const supabase = new Proxy({} as ReturnType<typeof createAdminClient>, {
+  get(target, prop) {
+    if (!_supabase) {
+      _supabase = createAdminClient();
+    }
+    return Reflect.get(_supabase, prop as any);
+  }
+});
 
 /**
  * Helper to safely parse LLM JSON output that might be wrapped in Markdown code blocks.
