@@ -1,0 +1,326 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   FinDoc Analyst — Design System (Hyper-Premium Light Mode)
+   Inspired by: Rows.com (data), Linear.app (layout), Anthropic (reading)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@theme inline {
+  /* ─── Color Palette: Refined Greyscale ─────────────────────────────── */
+  --color-stone-50: #fafaf9;
+  --color-stone-100: #f5f5f4;
+  --color-stone-200: #e7e5e4;
+  --color-stone-300: #d6d3d1;
+  --color-stone-400: #a8a29e;
+  --color-stone-500: #78716c;
+  --color-stone-600: #57534e;
+  --color-stone-700: #44403c;
+  --color-stone-800: #292524;
+  --color-stone-900: #1c1917;
+  --color-stone-950: #0c0a09;
+
+  /* ─── Accent Colors: Sharp, Non-Generic ────────────────────────────── */
+  --color-accent-primary: #f0421d; /* Electric vermilion */
+  --color-accent-primary-hover: #d83b1a;
+  --color-accent-secondary: #0f172a; /* Deep ink */
+  --color-accent-tertiary: #f1f5f9; /* Frost */
+
+  --color-accent-emerald: #10b981;
+  --color-accent-emerald-muted: #d1fae5;
+  --color-accent-red: #ef4444;
+  --color-accent-red-muted: #fee2e2;
+  --color-accent-amber: #f59e0b;
+  --color-accent-amber-muted: #fef3c7;
+  --color-accent-blue: #3b82f6;
+
+  /* ─── Semantic Colors (Light Mode) ─────────────────────────────────── */
+  --color-surface-primary: #ffffff;
+  --color-surface-secondary: #fdfdfc;
+  --color-surface-tertiary: #f8f8f7;
+  --color-surface-elevated: #ffffff;
+  --color-surface-hover: #f5f5f4;
+
+  --color-border-default: #e7e5e4;
+  --color-border-subtle: #f5f5f4;
+  --color-border-strong: #d6d3d1;
+
+  --color-text-primary: #1c1917;
+  --color-text-secondary: #57534e;
+  --color-text-tertiary: #78716c;
+  --color-text-muted: #a8a29e;
+
+  /* ─── Typography ────────────────────────────────────────────────────── */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+  /* ─── Spacing (Rows.com density) ────────────────────────────────────── */
+  --spacing-cell: 0px 8px; /* Zero vertical padding for razor-sharp grids */
+  --spacing-row: 0px;
+}
+
+/* ─── Base Resets ──────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  border-color: var(--color-border-default);
+}
+
+html {
+  background-color: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  font-feature-settings: "ss01" 1, "ss02" 1, "cv01" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+/* ─── Tabular Nums for ALL Financial Data ──────────────────────────────── */
+.tabular-nums,
+[data-metric],
+table td,
+table th,
+.metric-cell,
+.data-grid td {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+/* ─── Custom Scrollbar (Linear-style, minimal) ─────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-stone-200);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-stone-300);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-stone-200) transparent;
+}
+
+/* ─── Selection ────────────────────────────────────────────────────────── */
+::selection {
+  background-color: var(--color-accent-primary);
+  color: white;
+}
+
+/* ─── Focus Ring ───────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 1px;
+}
+
+/* ─── 1px Border Utility (Linear-style structural borders) ─────────────── */
+.border-structural {
+  border: 1px solid var(--color-border-default);
+}
+
+.border-structural-subtle {
+  border: 1px solid var(--color-border-subtle);
+}
+
+/* ─── Data Grid Styles (Rows.com inspired) ─────────────────────────────── */
+/* Razor-sharp, grid-aligned, zero padding approach */
+.data-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--color-surface-primary);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  border-bottom: 1px solid var(--color-border-strong);
+  border-right: 1px solid var(--color-border-default);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.data-grid th:last-child {
+  border-right: none;
+}
+
+.data-grid td {
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border-default);
+  border-right: 1px solid var(--color-border-subtle);
+  white-space: nowrap;
+}
+
+.data-grid td:last-child {
+  border-right: none;
+}
+
+.data-grid tr:hover td {
+  background-color: var(--color-surface-tertiary);
+}
+
+.data-grid td.metric-label {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.data-grid td.metric-value {
+  font-weight: 500;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-grid td.delta-positive {
+  color: var(--color-accent-emerald);
+}
+
+.data-grid td.delta-negative {
+  color: var(--color-accent-red);
+}
+
+.data-grid td.delta-neutral {
+  color: var(--color-text-muted);
+}
+
+/* ─── Diff Viewer (Risk comparison) ────────────────────────────────────── */
+.diff-added {
+  background-color: var(--color-accent-emerald-muted);
+  border-left: 2px solid var(--color-accent-emerald);
+}
+
+.diff-removed {
+  background-color: var(--color-accent-red-muted);
+  border-left: 2px solid var(--color-accent-red);
+}
+
+.diff-changed {
+  background-color: var(--color-accent-amber-muted);
+  border-left: 2px solid var(--color-accent-amber);
+}
+
+/* ─── Memo Canvas (Anthropic Console style) ────────────────────────────── */
+/* Brutally functional, wide layout, distraction-free */
+.memo-canvas {
+  max-width: 800px;
+  margin: 0 auto;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  padding: 2rem 4rem;
+}
+
+.memo-canvas h1, .memo-canvas h2, .memo-canvas h3 {
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+}
+
+.memo-canvas h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.memo-canvas h2 {
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  color: var(--color-text-primary);
+}
+
+.memo-canvas h3 {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-text-secondary);
+}
+
+.memo-canvas p {
+  margin-bottom: 1rem;
+}
+
+.memo-canvas ul,
+.memo-canvas ol {
+  margin-bottom: 1rem;
+  padding-left: 1.25rem;
+}
+
+.memo-canvas li {
+  margin-bottom: 0.25rem;
+}
+
+.memo-canvas strong {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.memo-canvas blockquote {
+  border-left: 2px solid var(--color-border-strong);
+  padding-left: 1rem;
+  color: var(--color-text-secondary);
+  margin: 1.5rem 0;
+  font-style: italic;
+}
+
+/* ─── Animations ───────────────────────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.15s ease-out;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-secondary) 25%,
+    var(--color-surface-hover) 37%,
+    var(--color-surface-secondary) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
