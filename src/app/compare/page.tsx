@@ -8,6 +8,7 @@ import { METRIC_LABELS } from "@/lib/utils/constants";
 import { formatMetricValue } from "@/lib/utils/formatters";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { ArrowLeft, BarChart2 } from "lucide-react";
+import type { MetricValue } from "@/lib/utils/types";
 import {
   BarChart,
   Bar,
@@ -31,8 +32,7 @@ interface CompareData {
     id: string;
     status: string;
   } | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  metrics: any;
+  metrics: Record<string, MetricValue | null> | null;
 }
 
 function CompareContent() {
@@ -124,14 +124,10 @@ function CompareContent() {
   const chartData = data.map((d) => {
     const revVal = d.metrics?.revenue?.value;
     const niVal = d.metrics?.net_income?.value;
-    
-    // Attempt to parse string/number for charts
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parseNum = (val: any) => {
+
+    const parseNum = (val: number | null | undefined): number => {
       if (val === null || val === undefined) return 0;
-      if (typeof val === 'number') return val;
-      const num = parseFloat(String(val).replace(/[^0-9.-]+/g,""));
-      return isNaN(num) ? 0 : num;
+      return val;
     };
 
     return {

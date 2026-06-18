@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { Card, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { Dropzone } from "@/components/documents/dropzone";
@@ -10,7 +10,7 @@ import { DocumentList } from "@/components/documents/document-list";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { UploadMetadata } from "@/components/documents/dropzone";
-import type { Document } from "@/lib/utils/types";
+import type { DocumentWithCompanyJoin } from "@/lib/utils/types";
 import { Space_Grotesk } from "next/font/google";
 
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
@@ -33,7 +33,7 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentDocs, setRecentDocs] = useState<(Document & { company_name?: string; company_ticker?: string })[]>([]);
+  const [recentDocs, setRecentDocs] = useState<DocumentWithCompanyJoin[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
   const router = useRouter();
@@ -67,12 +67,14 @@ export default function DashboardPage() {
       });
 
       if (recentDocsResult.data) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mapped = recentDocsResult.data.map((d: any) => ({
-          ...d,
-          company_name: d.companies?.name,
-          company_ticker: d.companies?.ticker,
-        }));
+        const mapped: DocumentWithCompanyJoin[] = recentDocsResult.data.map((d: unknown) => {
+          const row = d as DocumentWithCompanyJoin;
+          return {
+            ...row,
+            company_name: row.companies?.name,
+            company_ticker: row.companies?.ticker,
+          };
+        });
         setRecentDocs(mapped);
       }
 

@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatPercent } from "@/lib/utils/formatters";

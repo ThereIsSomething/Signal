@@ -420,6 +420,15 @@ export interface DocumentWithCompany extends Document {
   company: Company;
 }
 
+/**
+ * Result type for Supabase joins: documents.*, companies(name, ticker)
+ */
+export type DocumentWithCompanyJoin = Document & {
+  companies: Pick<Company, "name" | "ticker"> | null;
+  company_name?: string;
+  company_ticker?: string;
+};
+
 export interface MetricWithDelta {
   label: string;
   current: MetricValue | null;

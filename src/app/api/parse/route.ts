@@ -6,11 +6,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runPipeline } from "@/lib/pipeline/orchestrator";
+import {
+  RATE_LIMITS,
+  checkRateLimitWithResponse,
+} from "@/lib/rate-limit/api-rate-limiter";
 import type { FilingType } from "@/lib/utils/types";
 
 export const maxDuration = 300; // 5 minutes max (for Vercel)
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 5 uploads per minute per IP
+  const rateLimitResponse = checkRateLimitWithResponse(request, RATE_LIMITS.UPLOAD);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;

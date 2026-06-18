@@ -385,7 +385,7 @@ function runPromptTests(): TestResult[] {
 
 import { rateLimiter } from "@/lib/nim/rate-limiter";
 
-function runRateLimiterTests(): TestResult[] {
+async function runRateLimiterTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];
 
   // Test that rate limiter exists and has expected methods
@@ -406,23 +406,29 @@ function runRateLimiterTests(): TestResult[] {
 
   // Test sequential execution
   try {
-    const timestamps: number[] = [];
+    const executionOrder: number[] = [];
     const start = Date.now();
 
-    // Run 3 quick tasks
-    const promises = [1, 2, 3].map((i) =>
+    // Run 3 quick tasks and await them all
+    const results_order = await Promise.all([1, 2, 3].map((i) =>
       rateLimiter.enqueue(async () => {
-        timestamps.push(Date.now() - start);
+        executionOrder.push(i);
         return i;
       })
-    );
+    ));
 
-    // Check that promises resolve (don't need to wait in test runner)
-    const passed = promises.length === 3;
+    // Verify tasks executed in order and returned correct values
+    const correctOrder = executionOrder.join(",") === "1,2,3";
+    const correctValues = results_order.join(",") === "1,2,3";
+    const withinTimeframe = (Date.now() - start) < 10000; // Should complete within 10s
+
+    const passed = correctOrder && correctValues && withinTimeframe;
     results.push({
-      name: "RateLimiter: Sequential enqueue accepts 3 tasks",
+      name: "RateLimiter: Sequential execution with correct order and timing",
       passed,
-      message: passed ? "✓ 3 tasks enqueued" : "Failed to enqueue tasks",
+      message: passed
+        ? `✓ 3 tasks executed in order [${executionOrder}] within ${Date.now() - start}ms`
+        : `Order was [${executionOrder}], values [${results_order}], took ${Date.now() - start}ms`,
     });
   } catch (e) {
     results.push({

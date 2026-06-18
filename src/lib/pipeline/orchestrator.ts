@@ -34,6 +34,7 @@ import type {
   DocumentStatus,
   PipelineStep,
   FilingType,
+  MetricValue,
 } from "@/lib/utils/types";
 
 const supabase = createAdminClient();
@@ -348,45 +349,270 @@ export async function runPipeline(
       outputTokens: risksResponse.usage?.completion_tokens,
     });
 
-    // ─── Step 6: Generate Embeddings ─────────────────────────────────
+    // ─── Step 6: Compare Risks Across Periods ────────────────────────
+    await logPipelineStep(documentId, "compare_risks", "running");
+    const compareRisksStart = Date.now();
+
+    // Find the prior document for this company (previous fiscal year)
+    const { data: priorDoc } = await supabase
+      .from("documents")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("filing_type", filingType)
+      .lt("fiscal_year", fiscalYear)
+      .order("fiscal_year", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (priorDoc) {
+      // Fetch current risk factors
+      const { data: currentRisks } = await supabase
+        .from("risk_factors")
+        .select("*")
+        .eq("document_id", documentId);
+
+      // Fetch prior risk factors
+      const { data: priorRisks } = await supabase
+        .from("risk_factors")
+        .select("*")
+        .eq("document_id", priorDoc.id);
+
+      if (currentRisks && priorRisks && currentRisks.length > 0 && priorRisks.length > 0) {
+        // Generate embeddings for both batches
+        const allRiskTexts = [
+          ...currentRisks.map((r) => r.risk_text),
+          ...priorRisks.map((r) => r.risk_text),
+        ];
+
+        const allEmbeddings = await rateLimiter.enqueue(() =>
+          nimEmbedding(allRiskTexts)
+        );
+
+        const currentEmbeds = allEmbeddings.slice(0, currentRisks.length);
+        const priorEmbeds = allEmbeddings.slice(currentRisks.length);
+
+        // Store current risk embeddings
+        for (let i = 0; i < currentRisks.length; i++) {
+          await supabase.from("risk_embeddings").insert({
+            risk_factor_id: currentRisks[i].id,
+            document_id: documentId,
+            embedding: JSON.stringify(currentEmbeds[i]) as unknown as number[],
+          });
+        }
+
+        // Compute cosine similarity and create comparisons
+        const usedPriorIds = new Set<string>();
+
+        for (const current of currentRisks) {
+          const currIdx = currentRisks.indexOf(current);
+          let bestMatch: { prior: typeof priorRisks[0]; score: number } | null = null;
+
+          for (const prior of priorRisks) {
+            if (usedPriorIds.has(prior.id)) continue;
+
+            const priorIdx = priorRisks.indexOf(prior);
+            const currEmb = currentEmbeds[currIdx];
+            const priorEmb = priorEmbeds[priorIdx];
+
+            // Dot product for cosine similarity on normalized vectors
+            let dotProduct = 0;
+            let magCurr = 0;
+            let magPrior = 0;
+            for (let j = 0; j < currEmb.length; j++) {
+              dotProduct += currEmb[j] * priorEmb[j];
+              magCurr += currEmb[j] * currEmb[j];
+              magPrior += priorEmb[j] * priorEmb[j];
+            }
+            const similarity =
+              Math.sqrt(magCurr) > 0 && Math.sqrt(magPrior) > 0
+                ? dotProduct / (Math.sqrt(magCurr) * Math.sqrt(magPrior))
+                : 0;
+
+            if (!bestMatch || similarity > bestMatch.score) {
+              bestMatch = { prior, score: similarity };
+            }
+          }
+
+          if (bestMatch && bestMatch.score > 0.7) {
+            usedPriorIds.add(bestMatch.prior.id);
+
+            const severityOrder = ["critical", "high", "medium", "low", "informational"];
+            const currSeverityIdx = severityOrder.indexOf(current.severity);
+            const priorSeverityIdx = severityOrder.indexOf(bestMatch.prior.severity as string);
+
+            let changeType: "unchanged" | "escalated" | "deescalated" = "unchanged";
+            if (currSeverityIdx < priorSeverityIdx) changeType = "escalated";
+            else if (currSeverityIdx > priorSeverityIdx) changeType = "deescalated";
+
+            await supabase.from("risk_comparisons").insert({
+              current_document_id: documentId,
+              prior_document_id: priorDoc.id,
+              risk_id_current: current.id,
+              risk_id_prior: bestMatch.prior.id,
+              change_type: changeType,
+              similarity_score: bestMatch.score,
+              diff_summary: changeType === "escalated"
+                ? `Risk severity escalated from ${bestMatch.prior.severity} to ${current.severity}`
+                : changeType === "deescalated"
+                ? `Risk severity decreased from ${bestMatch.prior.severity} to ${current.severity}`
+                : "Risk severity unchanged",
+              metadata: {},
+            });
+
+            if (changeType === "escalated") {
+              await supabase
+                .from("risk_factors")
+                .update({ is_escalated: true })
+                .eq("id", current.id);
+            }
+          } else {
+            // New risk — no close match in prior period
+            await supabase.from("risk_comparisons").insert({
+              current_document_id: documentId,
+              prior_document_id: priorDoc.id,
+              risk_id_current: current.id,
+              risk_id_prior: null,
+              change_type: "new",
+              similarity_score: bestMatch?.score ?? 0,
+              diff_summary: "New risk factor not present in prior period",
+              metadata: {},
+            });
+
+            // Mark the risk as new
+            await supabase
+              .from("risk_factors")
+              .update({ is_new: true })
+              .eq("id", current.id);
+          }
+        }
+
+        // Mark unmatched prior risks as removed
+        for (const prior of priorRisks) {
+          if (!usedPriorIds.has(prior.id)) {
+            await supabase.from("risk_comparisons").insert({
+              current_document_id: documentId,
+              prior_document_id: priorDoc.id,
+              risk_id_current: null,
+              risk_id_prior: prior.id,
+              change_type: "removed",
+              similarity_score: 0,
+              diff_summary: "Risk factor removed in current period",
+              metadata: {},
+            });
+          }
+        }
+      }
+    } else {
+      // No prior document — just generate embeddings without comparison
+      const { data: riskFactors } = await supabase
+        .from("risk_factors")
+        .select("id, risk_text")
+        .eq("document_id", documentId);
+
+      if (riskFactors && riskFactors.length > 0) {
+        const riskTexts = riskFactors.map((r) => r.risk_text);
+        const riskEmbeddings = await rateLimiter.enqueue(() =>
+          nimEmbedding(riskTexts)
+        );
+
+        for (let i = 0; i < riskFactors.length; i++) {
+          await supabase.from("risk_embeddings").insert({
+            risk_factor_id: riskFactors[i].id,
+            document_id: documentId,
+            embedding: JSON.stringify(riskEmbeddings[i]) as unknown as number[],
+          });
+        }
+      }
+    }
+
+    await logPipelineStep(documentId, "compare_risks", "completed", {
+      durationMs: Date.now() - compareRisksStart,
+    });
+
+    // ─── Step 7: Populate Competitor Benchmarks ───────────────────────
     await logPipelineStep(documentId, "generate_embeddings", "running");
 
-    // Generate risk embeddings
-    const { data: riskFactors } = await supabase
-      .from("risk_factors")
-      .select("id, risk_text")
-      .eq("document_id", documentId);
+    try {
+      // Build benchmark metrics from extracted financial data
+      const benchmarkMetrics: Record<string, MetricValue> = {};
 
-    if (riskFactors && riskFactors.length > 0) {
-      const riskTexts = riskFactors.map((r) => r.risk_text);
-      const riskEmbeddings = await rateLimiter.enqueue(() =>
-        nimEmbedding(riskTexts)
-      );
+      if (metricsJson.revenue) benchmarkMetrics.revenue = metricsJson.revenue;
+      if (metricsJson.gross_margin) benchmarkMetrics.gross_margin = metricsJson.gross_margin;
+      if (metricsJson.operating_margin) benchmarkMetrics.operating_margin = metricsJson.operating_margin;
+      if (metricsJson.net_margin) benchmarkMetrics.net_margin = metricsJson.net_margin;
 
-      const riskEmbInserts = riskFactors.map((r, i) => ({
-        risk_factor_id: r.id,
-        document_id: documentId,
-        embedding: JSON.stringify(riskEmbeddings[i]),
-      }));
-
-      // Insert embeddings one at a time due to vector format
-      for (const insert of riskEmbInserts) {
-        await supabase.rpc("match_risk_embeddings", {
-          query_embedding: [] as never, // Placeholder — actual insert uses raw SQL or separate insert
-        }).then(() => {});
-
-        // Direct insert with embedding
-        await supabase.from("risk_embeddings").insert({
-          risk_factor_id: insert.risk_factor_id,
-          document_id: insert.document_id,
-          embedding: insert.embedding as unknown as number[],
-        });
+      // Revenue growth (YoY) — use extracted value or compute from prior period
+      if (metricsJson.yoy_revenue_growth) {
+        benchmarkMetrics.revenue_growth_yoy = metricsJson.yoy_revenue_growth;
       }
+
+      if (metricsJson.ebitda && metricsJson.revenue) {
+        // Compute EBITDA margin
+        if (metricsJson.revenue.value && metricsJson.revenue.value > 0) {
+          benchmarkMetrics.ebitda_margin = {
+            value: (metricsJson.ebitda.value ?? 0) / metricsJson.revenue.value,
+            unit: "pct" as const,
+            raw_text: "Computed from extracted data",
+          };
+        }
+      }
+
+      if (metricsJson.total_debt && metricsJson.ebitda) {
+        // Compute net debt / EBITDA
+        if (metricsJson.ebitda.value && metricsJson.ebitda.value > 0) {
+          const netDebtVal = metricsJson.total_debt.value ?? 0;
+          benchmarkMetrics.net_debt_to_ebitda = {
+            value: netDebtVal / metricsJson.ebitda.value,
+            unit: "x" as const,
+            raw_text: "Computed from extracted data",
+          };
+        }
+      }
+
+      if (metricsJson.capex && metricsJson.revenue) {
+        // Compute CapEx / Revenue
+        if (metricsJson.revenue.value && metricsJson.revenue.value > 0) {
+          benchmarkMetrics.capex_to_revenue = {
+            value: (metricsJson.capex.value ?? 0) / metricsJson.revenue.value,
+            unit: "pct" as const,
+            raw_text: "Computed from extracted data",
+          };
+        }
+      }
+
+      // ROIC approximation using operating income / (total debt + equity approximation)
+      if (metricsJson.operating_income && metricsJson.total_debt) {
+        if (metricsJson.total_debt.value && metricsJson.total_debt.value > 0) {
+          const investedCapital = metricsJson.total_debt.value; // Simplified
+          benchmarkMetrics.roic = {
+            value: (metricsJson.operating_income.value ?? 0) / investedCapital,
+            unit: "pct" as const,
+            raw_text: "Approximated from extracted data",
+          };
+        }
+      }
+
+      if (Object.keys(benchmarkMetrics).length > 0) {
+        const benchmarkGroup = `${filingType.replace("-", "_")}_${fiscalYear}`;
+
+        await supabase.from("competitor_benchmarks").upsert({
+          benchmark_group: benchmarkGroup,
+          company_id: companyId,
+          fiscal_year: fiscalYear,
+          fiscal_quarter: fiscalQuarter,
+          metrics: benchmarkMetrics,
+          capital_allocation: {},
+          metadata: {},
+        }, { onConflict: "benchmark_group, company_id, fiscal_year" });
+      }
+    } catch (benchmarkError) {
+      // Benchmark population is non-critical — log and continue
+      console.error(`[Pipeline] Benchmark population error:`, benchmarkError);
     }
 
     await logPipelineStep(documentId, "generate_embeddings", "completed");
 
-    // ─── Step 7: Generate Investment Memo ─────────────────────────────
+    // ─── Step 8: Generate Investment Memo ─────────────────────────────
     await updateDocumentStatus(documentId, "generating_memo");
     await logPipelineStep(documentId, "generate_memo", "running");
     const memoStart = Date.now();
@@ -401,6 +627,15 @@ export async function runPipeline(
 
     const risksStr = JSON.stringify(risksJson.risks || [], null, 2);
 
+    // Fetch risk comparisons to enrich the memo
+    const { data: riskCompData } = await supabase
+      .from("risk_comparisons")
+      .select("*")
+      .eq("current_document_id", documentId);
+    const riskCompStr = riskCompData && riskCompData.length > 0
+      ? JSON.stringify(riskCompData, null, 2)
+      : undefined;
+
     const memoResponse = await rateLimiter.enqueue(() =>
       nimChatCompletion(
         [
@@ -412,7 +647,8 @@ export async function runPipeline(
               fiscalPeriod,
               metricsStr,
               toneStr,
-              risksStr
+              risksStr,
+              riskCompStr
             ),
           },
         ],

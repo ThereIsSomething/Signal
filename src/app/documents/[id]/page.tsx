@@ -10,9 +10,9 @@ import { Card } from "@/components/ui/card";
 import { SkeletonTable, SkeletonText } from "@/components/ui/skeleton";
 import { SplitPane } from "@/components/layout/split-pane";
 import { createClient } from "@/lib/supabase/client";
-import { formatMetricValue, formatDate } from "@/lib/utils/formatters";
+import { formatMetricValue, formatDate, formatDelta, getDeltaColor } from "@/lib/utils/formatters";
 import { METRIC_LABELS } from "@/lib/utils/constants";
-import type { Document, FinancialMetric, ToneAnalysis, RiskFactor, InvestmentMemo, MetricValue } from "@/lib/utils/types";
+import type { Document, FinancialMetric, ToneAnalysis, RiskFactor, InvestmentMemo, MetricValue, MetricWithDelta } from "@/lib/utils/types";
 import dynamic from "next/dynamic";
 
 const DocumentViewer = dynamic(
@@ -46,6 +46,7 @@ export default function DocumentDetailPage() {
   const [toneAnalyses, setToneAnalyses] = useState<ToneAnalysis[]>([]);
   const [risks, setRisks] = useState<RiskFactor[]>([]);
   const [memo, setMemo] = useState<InvestmentMemo | null>(null);
+  const [metricsComparison, setMetricsComparison] = useState<MetricWithDelta[] | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [activeSearchText, setActiveSearchText] = useState<string>("");
@@ -62,7 +63,51 @@ export default function DocumentDetailPage() {
       const risksRes = await supabase.from("risk_factors").select("*").eq("document_id", documentId).order("display_order");
       const memoRes = await supabase.from("investment_memos").select("*").eq("document_id", documentId).maybeSingle();
 
-      if (docRes.data) setDocument(docRes.data as unknown as Document);
+      let comparisonData: MetricWithDelta[] | null = null;
+      if (docRes.data) {
+        const doc = docRes.data as unknown as Document;
+        setDocument(doc);
+
+        // Fetch YoY comparison if we have a prior year
+        if (doc.fiscal_year) {
+          const priorYear = doc.fiscal_year - 1;
+          const { data: priorMetrics } = await supabase
+            .from("financial_metrics")
+            .select("*")
+            .eq("company_id", doc.company_id)
+            .eq("fiscal_year", priorYear)
+            .maybeSingle();
+
+          if (priorMetrics) {
+            const current = metricsRes.data as unknown as FinancialMetric | null;
+            const prior = priorMetrics as unknown as FinancialMetric | null;
+
+            if (current && prior) {
+              const comparisons: MetricWithDelta[] = [];
+              const currentRecord = current as unknown as Record<string, MetricValue | null>;
+              const priorRecord = prior as unknown as Record<string, MetricValue | null>;
+
+              for (const [key, label] of Object.entries(METRIC_LABELS)) {
+                const currentVal = currentRecord[key] ?? null;
+                const priorVal = priorRecord[key] ?? null;
+
+                let delta: number | null = null;
+                let deltaType: "positive" | "negative" | "neutral" = "neutral";
+
+                if (currentVal?.value != null && priorVal?.value != null && priorVal.value !== 0) {
+                  delta = (currentVal.value - priorVal.value) / Math.abs(priorVal.value);
+                  deltaType = delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral";
+                }
+
+                comparisons.push({ label, current: currentVal, prior: priorVal, delta, deltaType });
+              }
+              comparisonData = comparisons;
+            }
+          }
+        }
+      }
+
+      setMetricsComparison(comparisonData);
       if (metricsRes.data) setMetrics(metricsRes.data as unknown as FinancialMetric);
       if (toneRes.data) setToneAnalyses(toneRes.data as unknown as ToneAnalysis[]);
       if (risksRes.data) setRisks(risksRes.data as unknown as RiskFactor[]);
@@ -128,16 +173,22 @@ export default function DocumentDetailPage() {
                 <table className="data-grid">
                   <thead>
                     <tr>
-                      <th className="w-[240px]">Metric</th>
-                      <th className="text-right">Value</th>
+                      <th className="w-[200px]">Metric</th>
+                      <th className="text-right">Current</th>
+                      <th className="text-right w-[140px]">Prior Year</th>
+                      <th className="text-right w-[100px]">YoY Change</th>
                       <th className="text-right w-[100px]">Raw Text</th>
                     </tr>
                   </thead>
                   <tbody>
                     {Object.entries(METRIC_LABELS).map(([key, label]) => {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      const val = (metrics as any)?.[key] as MetricValue | null;
+                      const metricsRecord = metrics as unknown as Record<string, MetricValue | null> | null;
+                      const val = metricsRecord?.[key] ?? null;
                       if (!val || val.value === null) return null;
+
+                      const comp = metricsComparison?.find((c) => c.label === label);
+                      const priorVal = comp?.prior ?? null;
+
                       return (
                         <tr 
                           key={key} 
@@ -149,7 +200,13 @@ export default function DocumentDetailPage() {
                         >
                           <td className="metric-label">{label}</td>
                           <td className="metric-value">{formatMetricValue(val)}</td>
-                          <td className="text-right text-[12px] text-text-tertiary font-mono truncate max-w-[200px]">
+                          <td className="text-right text-[13px] font-medium tabular-nums text-text-secondary">
+                            {priorVal ? formatMetricValue(priorVal) : "—"}
+                          </td>
+                          <td className={`text-right text-[13px] font-medium tabular-nums ${comp ? getDeltaColor(comp.delta) : 'text-text-muted'}`}>
+                            {comp?.delta != null ? formatDelta(comp.delta) : "—"}
+                          </td>
+                          <td className="text-right text-[12px] text-text-tertiary font-mono truncate max-w-[120px]">
                             {val.raw_text || "—"}
                           </td>
                         </tr>

@@ -20,7 +20,7 @@ export async function GET() {
   suites.push({ name: "Section Splitter", results: runSectionSplitterTests() });
   suites.push({ name: "Formatters", results: runFormatterTests() });
   suites.push({ name: "Prompt Templates", results: runPromptTests() });
-  suites.push({ name: "Rate Limiter", results: runRateLimiterTests() });
+  suites.push({ name: "Rate Limiter", results: await runRateLimiterTests() });
   suites.push({ name: "Constants", results: runConstantsTests() });
 
   // Aggregate stats

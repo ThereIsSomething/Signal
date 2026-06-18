@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  RATE_LIMITS,
+  checkRateLimitWithResponse,
+} from "@/lib/rate-limit/api-rate-limiter";
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Rate limit: 10 mutations per minute per IP
+  const rateLimitResponse = checkRateLimitWithResponse(request, RATE_LIMITS.MUTATION);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const { id: documentId } = await params;
     if (!documentId) {
@@ -51,8 +59,9 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error";
     console.error("Unhandled error deleting document:", err);
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

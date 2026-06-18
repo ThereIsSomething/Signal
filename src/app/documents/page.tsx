@@ -6,11 +6,11 @@ import { Dropzone } from "@/components/documents/dropzone";
 import { DocumentList } from "@/components/documents/document-list";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import type { Document } from "@/lib/utils/types";
+import type { DocumentWithCompanyJoin } from "@/lib/utils/types";
 import type { UploadMetadata } from "@/components/documents/dropzone";
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<(Document & { company_name?: string; company_ticker?: string })[]>([]);
+  const [documents, setDocuments] = useState<DocumentWithCompanyJoin[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
   const router = useRouter();
@@ -23,12 +23,14 @@ export default function DocumentsPage() {
         .order("created_at", { ascending: false });
 
       if (data) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mapped = data.map((d: any) => ({
-          ...d,
-          company_name: d.companies?.name,
-          company_ticker: d.companies?.ticker,
-        }));
+        const mapped: DocumentWithCompanyJoin[] = data.map((d: unknown) => {
+          const row = d as DocumentWithCompanyJoin;
+          return {
+            ...row,
+            company_name: row.companies?.name,
+            company_ticker: row.companies?.ticker,
+          };
+        });
         setDocuments(mapped);
       }
       setLoading(false);

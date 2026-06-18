@@ -64,9 +64,8 @@ export async function nimEmbedding(
     input,
     encoding_format: "float",
     // NV-Embed-QA requires input_type at the root
-    input_type: "passage",
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
+    input_type: "passage" as const,
+  } as OpenAI.Embeddings.EmbeddingCreateParams & { input_type: string });
 
   return response.data.map((d) => d.embedding);
 }

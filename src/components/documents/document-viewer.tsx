@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Search, FileText } from "lucide-react";
@@ -14,6 +15,15 @@ interface DocumentViewerProps {
   searchText?: string;
 }
 
+interface TextItem {
+  str: string;
+  dir: string;
+  width: number;
+  height: number;
+  transform: number[];
+  fontName: string;
+}
+
 export function DocumentViewer({ url, fileName, searchText }: DocumentViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
@@ -21,8 +31,7 @@ export function DocumentViewer({ url, fileName, searchText }: DocumentViewerProp
   const [localSearchText, setLocalSearchText] = useState<string>("");
   const [textContent, setTextContent] = useState<string>("");
   const [htmlContent, setHtmlContent] = useState<string>("");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [pdfProxy, setPdfProxy] = useState<any>(null);
+  const [pdfProxy, setPdfProxy] = useState<PDFDocumentProxy | null>(null);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   const ext = fileName.split(".").pop()?.toLowerCase();
@@ -53,8 +62,7 @@ export function DocumentViewer({ url, fileName, searchText }: DocumentViewerProp
     }
   }, [isTxt, isHtml, url]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function onDocumentLoadSuccess(pdf: any) {
+  function onDocumentLoadSuccess(pdf: PDFDocumentProxy) {
     setNumPages(pdf.numPages);
     setPdfProxy(pdf);
     setPageNumber(1);
@@ -91,8 +99,7 @@ export function DocumentViewer({ url, fileName, searchText }: DocumentViewerProp
         try {
           const page = await pdfProxy.getPage(i);
           const textContent = await page.getTextContent();
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const pageText = textContent.items.map((item: any) => item.str).join("").toLowerCase().replace(/\s+/g, "");
+          const pageText = (textContent.items as TextItem[]).map((item) => item.str).join("").toLowerCase().replace(/\s+/g, "");
           
           if (pageText.includes(searchStr) || pageText.includes(shortSearchStr)) {
             setPageNumber(i);
@@ -106,8 +113,7 @@ export function DocumentViewer({ url, fileName, searchText }: DocumentViewerProp
     findPdfPage();
   }, [isPdf, pdfProxy, localSearchText]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const customTextRenderer = (textItem: any) => {
+  const customTextRenderer: (textItem: { str: string }) => string | React.JSX.Element = (textItem) => {
     if (!localSearchText) return textItem.str;
     const itemStr = textItem.str;
     const matchIndex = itemStr.toLowerCase().indexOf(localSearchText.toLowerCase());
@@ -200,7 +206,7 @@ export function DocumentViewer({ url, fileName, searchText }: DocumentViewerProp
             <Page 
               pageNumber={pageNumber} 
               scale={scale} 
-              customTextRenderer={customTextRenderer}
+              customTextRenderer={customTextRenderer as unknown as (textItem: { str: string }) => string}
               renderTextLayer={true}
               renderAnnotationLayer={true}
               className="shadow-md"

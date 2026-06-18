@@ -47,12 +47,12 @@ export async function fetchMetricsComparison(
 
   const metricKeys = Object.keys(METRIC_LABELS);
   const comparisons: MetricWithDelta[] = [];
+  const metricsRecord = currentMetrics as Record<string, MetricValue | null> | null;
+  const priorRecord = priorMetrics as Record<string, MetricValue | null> | null;
 
   for (const key of metricKeys) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const currentVal = (currentMetrics as any)?.[key] as MetricValue | null ?? null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const priorVal = (priorMetrics as any)?.[key] as MetricValue | null ?? null;
+    const currentVal = metricsRecord?.[key] ?? null;
+    const priorVal = priorRecord?.[key] ?? null;
 
     let delta: number | null = null;
     let deltaType: "positive" | "negative" | "neutral" = "neutral";
@@ -63,7 +63,7 @@ export async function fetchMetricsComparison(
     }
 
     comparisons.push({
-      label: METRIC_LABELS[key],
+      label: METRIC_LABELS[key] || key,
       current: currentVal,
       prior: priorVal,
       delta,

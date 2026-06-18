@@ -261,6 +261,10 @@ CREATE INDEX IF NOT EXISTS idx_benchmarks_group ON competitor_benchmarks(benchma
 CREATE INDEX IF NOT EXISTS idx_benchmarks_company ON competitor_benchmarks(company_id);
 CREATE INDEX IF NOT EXISTS idx_benchmarks_period ON competitor_benchmarks(benchmark_group, fiscal_year);
 
+-- Unique constraint for upsert: one benchmark entry per company per fiscal year per group
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmarks_unique
+  ON competitor_benchmarks(benchmark_group, company_id, fiscal_year);
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. Tone Analyses
 -- ─────────────────────────────────────────────────────────────────────────────

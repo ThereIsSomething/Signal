@@ -87,8 +87,7 @@ export function usePipelineStatus(documentId: string | null) {
       .eq("id", documentId)
       .single()
       .then(({ data }) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (data) setStatus((data as any).status as DocumentStatus);
+        if (data) setStatus((data as Record<string, unknown>).status as DocumentStatus);
         setLoading(false);
       });
 

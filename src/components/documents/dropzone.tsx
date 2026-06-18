@@ -73,9 +73,6 @@ export function Dropzone({ onUpload, compact = false }: DropzoneProps) {
     }
   };
 
-  const inputClass =
-    "w-full h-8 px-2.5 rounded-sm border border-border-default bg-surface-primary text-[13px] text-text-primary placeholder:text-text-muted focus:border-accent-primary focus:outline-none transition-colors shadow-sm";
-
   return (
     <div className="space-y-4">
       {/* Drop Area */}

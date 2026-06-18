@@ -6,7 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { DocumentList } from "@/components/documents/document-list";
 import { createClient } from "@/lib/supabase/client";
 import { ArrowLeft, Building2 } from "lucide-react";
-import type { Document } from "@/lib/utils/types";
+import type { DocumentWithCompanyJoin } from "@/lib/utils/types";
 
 interface Company {
   id: string;
@@ -22,7 +22,7 @@ export default function CompanyDetailPage() {
   const router = useRouter();
   
   const [company, setCompany] = useState<Company | null>(null);
-  const [documents, setDocuments] = useState<(Document & { company_name?: string; company_ticker?: string })[]>([]);
+  const [documents, setDocuments] = useState<DocumentWithCompanyJoin[]>([]);
   const [loading, setLoading] = useState(true);
   
   const supabase = createClient();
@@ -46,12 +46,14 @@ export default function CompanyDetailPage() {
         .order("created_at", { ascending: false });
 
       if (docsData) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mapped = docsData.map((d: any) => ({
-          ...d,
-          company_name: d.companies?.name,
-          company_ticker: d.companies?.ticker,
-        }));
+        const mapped: DocumentWithCompanyJoin[] = docsData.map((d: unknown) => {
+          const row = d as DocumentWithCompanyJoin;
+          return {
+            ...row,
+            company_name: row.companies?.name,
+            company_ticker: row.companies?.ticker,
+          };
+        });
         setDocuments(mapped);
       }
       
