@@ -342,6 +342,56 @@ All LLM calls go through a sequential rate limiter (40 RPM by default) to stay w
 
 ---
 
+# Application Workflow
+
+Signal Intelligence implements an automated, sequential pipeline that processes uploaded documents, extracts intelligence using LLM prompts, and serves analysis on the frontend:
+
+```mermaid
+flowchart TD
+    A["Upload PDF/HTML/DOCX"] --> B["Supabase Storage & DB Record"]
+    B --> C["LlamaParse Markdown Conversion"]
+    C --> D["SEC Section Splitter"]
+    D --> E["Financial Metric Extraction (LLM)"]
+    D --> F["Management Tone Analysis (LLM)"]
+    D --> G["Risk Factor Extraction (LLM)"]
+    G --> H["Cosine Similarity Embedding Match"]
+    H --> I["Benchmark Calculator"]
+    E & F & H & I --> J["Investment Memo Generation (LLM)"]
+    J --> K["Client Visualization & PDF Export"]
+```
+
+### 1. Ingestion & Pre-processing
+* **User Input**: Analysts upload filings (10-K/10-Q) or transcripts via the frontend dropzone. The request specifies metadata such as Company Name, Ticker, Fiscal Year, and Quarter.
+* **Storage & DB Entry**: Files are stored in the Supabase Storage bucket (`documents`). The company is upserted into the `companies` table, and a tracking record is created in the `documents` table with status `uploaded`.
+
+### 2. Parse & Section Split
+* **Markdown Conversion**: The system passes the file to [llamaparse.ts](file:///c:/Users/ASUS/Downloads/Signal-main/Signal-main/src/lib/parser/llamaparse.ts) which utilizes LlamaParse to convert PDFs to layout-aware Markdown format, maintaining tables and structured data.
+* **SEC Header Splitting**: The parsed markdown is split into individual sections by [section-splitter.ts](file:///c:/Users/ASUS/Downloads/Signal-main/Signal-main/src/lib/parser/section-splitter.ts) using regex mapping for 26+ standard headers (e.g. *Item 1A. Risk Factors*). The sections are saved to the `document_sections` database table.
+
+### 3. Metric Extraction & Sentiment Analysis
+* **Metric Extraction**: Financial and discussion sections are passed to **Nvidia NIM (Llama 3.3 70B)** using prompts defined in [extract-metrics.ts](file:///c:/Users/ASUS/Downloads/Signal-main/Signal-main/src/lib/nim/prompts/extract-metrics.ts). The LLM extracts figures (Revenue, Net Income, EBITDA, Debt, FCF) with text citations, saving them to the `financial_metrics` table.
+* **Tone Analysis**: Relevant sections are evaluated for sentiment, confidence level, and hedging language frequency using prompts from [analyze-tone.ts](file:///c:/Users/ASUS/Downloads/Signal-main/Signal-main/src/lib/nim/prompts/analyze-tone.ts). Output is logged in the `tone_analyses` table.
+
+### 4. Risk Factors & Cross-Period Comparison
+* **Risk Extraction**: Individual risk factors are parsed from Item 1A, categorized, and assigned severity scores using prompts from [extract-risks.ts](file:///c:/Users/ASUS/Downloads/Signal-main/Signal-main/src/lib/nim/prompts/extract-risks.ts), then stored in `risk_factors`.
+* **Cosine Similarity Match**: If a prior year's filing exists for the company, the system generates embeddings for all current and prior risk factors using `nvidia/nv-embedqa-e5-v5` embeddings.
+* **Change Classification**: Dot-product cosine similarity is computed between vectors. Pairs with similarity > `0.7` are matched and analyzed. The system classifies changes into:
+  * `new` (no match found in prior filing)
+  * `escalated` / `deescalated` (severity increased or decreased)
+  * `unchanged` (same risk level and content)
+  * `removed` (present in prior filing but absent in current)
+  * Updates are written to the `risk_comparisons` database table.
+
+### 5. Benchmark Calculation & Memo Generation
+* **Competitor Benchmarking**: Performance indicators like margins, net debt / EBITDA, CapEx / revenue, and estimated ROIC are calculated and upserted into the `competitor_benchmarks` table under a shared benchmark group.
+* **Investment Memo**: The system compiles extracted metrics, tone summaries, and risk comparisons into a final prompt from [generate-memo.ts](file:///c:/Users/ASUS/Downloads/Signal-main/Signal-main/src/lib/nim/prompts/generate-memo.ts). **Llama 3.3 70B** compiles an institutional-grade investment memo across 6 sections (Overview, Financials, Bull Case, Bear Case, Key Risks, Questions). The output is written to `investment_memos`.
+
+### 6. Presentation & Client-Side PDF Export
+* **Dashboard Tab Layout**: The user reviews the document under four tabs on `/documents/[id]`: Document Viewer (original vs. Markdown split pane), Financial Metrics (tables + citations), Risk Analysis (diff list showing similarity matching and severity changes), and the Investment Memo.
+* **PDF Export**: The generated investment memo is compiled and exported as a clean PDF using `html2pdf.js`.
+
+---
+
 # Tech Stack
 
 | Layer             | Technology                          |
