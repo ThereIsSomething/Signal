@@ -227,9 +227,9 @@ export default function DocumentDetailPage() {
             ) : toneAnalyses.length === 0 ? (
               <div className="p-8 text-center text-text-secondary">No tone analysis available.</div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-4 min-w-0">
                 {toneAnalyses.map((tone) => (
-                  <Card key={tone.id} padding="md">
+                  <Card key={tone.id} padding="md" className="min-w-0 overflow-hidden">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[13px] font-semibold text-text-primary">
                         {tone.section_key.replace(/_/g, " ").toUpperCase()}
@@ -275,11 +275,11 @@ export default function DocumentDetailPage() {
 
                     {/* Key Phrases */}
                     {tone.key_phrases && tone.key_phrases.length > 0 && (
-                      <div>
+                      <div className="mb-3">
                         <span className="text-[11px] text-text-tertiary font-medium uppercase tracking-wider">
                           Key Phrases
                         </span>
-                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        <div className="flex flex-wrap gap-1.5 mt-1.5 ">
                           {tone.key_phrases.slice(0, 8).map((phrase, i) => (
                             <div 
                               key={i}
@@ -290,6 +290,7 @@ export default function DocumentDetailPage() {
                               }}
                             >
                               <Badge
+                                className="max-w-full whitespace-normal break-words text-left"
                                 variant={
                                   phrase.type === "confident"
                                     ? "success"
@@ -302,6 +303,54 @@ export default function DocumentDetailPage() {
                               >
                                 &ldquo;{phrase.text}&rdquo;
                               </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notable Passages */}
+                    {tone.notable_passages && tone.notable_passages.length > 0 && (
+                      <div>
+                        <span className="text-[11px] text-text-tertiary font-medium uppercase tracking-wider">
+                          Notable Passages
+                        </span>
+                        <div className="space-y-2 mt-1.5">
+                          {tone.notable_passages.slice(0, 5).map((passage, i) => (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                setActiveSearchText(passage.text);
+                                setIsViewerOpen(true);
+                              }}
+                              className="p-3 rounded-md border border-border-default bg-surface-secondary cursor-pointer hover:border-accent-primary transition-colors"
+                            >
+                              <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-wrap break-words">
+                                &ldquo;{passage.text}&rdquo;
+                              </p>
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <Badge variant={
+                                  passage.sentiment === "confident"
+                                    ? "success"
+                                    : passage.sentiment === "cautious"
+                                    ? "warning"
+                                    : passage.sentiment === "defensive"
+                                    ? "danger"
+                                    : "default"
+                                }>
+                                  {passage.sentiment}
+                                </Badge>
+                                {passage.page != null && (
+                                  <span className="text-[11px] text-text-tertiary tabular-nums">
+                                    p. {passage.page}
+                                  </span>
+                                )}
+                                {passage.line != null && (
+                                  <span className="text-[11px] text-text-tertiary tabular-nums">
+                                    line {passage.line}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>
