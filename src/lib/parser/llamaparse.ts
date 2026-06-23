@@ -74,7 +74,7 @@ export async function parsePdfToMarkdown(
   const jobId = job.id;
 
   // 2. Poll for completion
-  const maxWaitMs = 300_000; // 5 minutes max
+  const maxWaitMs = 90_000; // 90 seconds max
   const pollIntervalMs = 3_000;
   const startTime = Date.now();
 

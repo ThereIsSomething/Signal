@@ -1,11 +1,6 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// Hook: useDocument
-// Client-side hook for fetching document data with realtime status updates
-// ═══════════════════════════════════════════════════════════════════════════════
-
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Document, DocumentStatus } from "@/lib/utils/types";
 
@@ -37,10 +32,8 @@ export function useDocument(documentId: string | null) {
   }, [documentId, supabase]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDocument();
 
-    // Subscribe to realtime status updates
     if (!documentId) return;
 
     const channel = supabase
@@ -75,12 +68,10 @@ export function usePipelineStatus(documentId: string | null) {
 
   useEffect(() => {
     if (!documentId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }
 
-    // Initial fetch
     supabase
       .from("documents")
       .select("status")
@@ -91,7 +82,6 @@ export function usePipelineStatus(documentId: string | null) {
         setLoading(false);
       });
 
-    // Realtime subscription
     const channel = supabase
       .channel(`pipeline-${documentId}`)
       .on(
@@ -115,4 +105,62 @@ export function usePipelineStatus(documentId: string | null) {
   }, [documentId, supabase]);
 
   return { status, loading };
+}
+
+/**
+ * Drives the pipeline step-by-step automatically.
+ * Calls POST /api/pipeline/{documentId}/step whenever the document
+ * is in a non-terminal state and no step is currently running.
+ */
+export function usePipelineDriver(documentId: string | null) {
+  const [driving, setDriving] = useState(false);
+  const [stepError, setStepError] = useState<string | null>(null);
+  const drivingRef = useRef(false);
+  const supabase = createClient();
+
+  const advance = useCallback(async () => {
+    if (!documentId || drivingRef.current) return;
+    drivingRef.current = true;
+    setDriving(true);
+    setStepError(null);
+    try {
+      const res = await fetch(`/api/pipeline/${documentId}/step`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Step failed");
+      return data;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Pipeline step failed";
+      setStepError(msg);
+      return null;
+    } finally {
+      drivingRef.current = false;
+      setDriving(false);
+    }
+  }, [documentId]);
+
+  const resume = useCallback(async () => {
+    if (!documentId || drivingRef.current) return;
+    drivingRef.current = true;
+    setDriving(true);
+    setStepError(null);
+    try {
+      const res = await fetch("/api/pipeline/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Resume failed");
+      return data;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Resume failed";
+      setStepError(msg);
+      return null;
+    } finally {
+      drivingRef.current = false;
+      setDriving(false);
+    }
+  }, [documentId]);
+
+  return { driving, stepError, advance, resume };
 }

@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { SkeletonTable, SkeletonText } from "@/components/ui/skeleton";
 import { SplitPane } from "@/components/layout/split-pane";
 import { createClient } from "@/lib/supabase/client";
+import { usePipelineDriver } from "@/hooks/use-document";
 import { formatMetricValue, formatDate, formatDelta, getDeltaColor } from "@/lib/utils/formatters";
 import { METRIC_LABELS } from "@/lib/utils/constants";
 import type { Document, FinancialMetric, ToneAnalysis, RiskFactor, InvestmentMemo, MetricValue, MetricWithDelta } from "@/lib/utils/types";
@@ -27,6 +28,7 @@ import {
   Download,
   FileText,
   X,
+  RefreshCw,
 } from "lucide-react";
 
 const TABS = [
@@ -54,6 +56,8 @@ export default function DocumentDetailPage() {
   const [isViewerOpen, setIsViewerOpen] = useState<boolean>(false);
 
   const supabase = createClient();
+
+  const { driving: pipelineRunning, stepError, advance, resume } = usePipelineDriver(documentId);
 
   useEffect(() => {
     async function fetchData() {
@@ -130,6 +134,14 @@ export default function DocumentDetailPage() {
 
     return () => { supabase.removeChannel(channel); };
   }, [documentId, supabase]);
+
+  // Auto-advance pipeline when document is in a non-terminal state
+  useEffect(() => {
+    if (document?.status && document.status !== "completed" && document.status !== "failed" && !pipelineRunning) {
+      const timer = setTimeout(() => advance(), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [document?.status, advance, pipelineRunning]);
 
   const isProcessing = document?.status !== "completed" && document?.status !== "failed";
 
@@ -596,11 +608,19 @@ export default function DocumentDetailPage() {
 
         {/* Error Bar */}
         {document?.status === "failed" && (
-          <div className="px-4 py-3 border-b border-accent-red/30 bg-accent-red/10 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-accent-red" />
-            <span className="text-[13px] text-accent-red font-medium">
+          <div className="px-4 py-3 border-b border-accent-red/30 bg-accent-red/10 flex items-center gap-3">
+            <AlertTriangle className="h-4 w-4 text-accent-red shrink-0" />
+            <span className="text-[13px] text-accent-red font-medium flex-1">
               Pipeline failed: {document.error_message || "An unknown error occurred during processing."}
             </span>
+            <button
+              onClick={resume}
+              disabled={pipelineRunning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent-red/20 hover:bg-accent-red/30 text-accent-red text-[12px] font-medium transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${pipelineRunning ? "animate-spin" : ""}`} />
+              {pipelineRunning ? "Retrying..." : "Retry Pipeline"}
+            </button>
           </div>
         )}
 

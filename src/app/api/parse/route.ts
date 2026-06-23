@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { runPipeline } from "@/lib/pipeline/orchestrator";
 import {
   RATE_LIMITS,
   checkRateLimitWithResponse,
@@ -100,30 +99,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Convert file to buffer
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
-
-    // 4. Run pipeline in background (non-blocking)
-    // In production, this would use a job queue (e.g., BullMQ, Inngest)
-    // For this project, we fire-and-forget on the server
-    runPipeline(
-      document.id,
-      fileBuffer,
-      file.name,
-      company.id,
-      companyName,
-      filingType,
-      fiscalYear,
-      fiscalQuarter
-    ).catch((err) => {
-      console.error("[API /parse] Pipeline error:", err);
-    });
-
     return NextResponse.json({
       success: true,
       documentId: document.id,
       companyId: company.id,
-      message: "Document uploaded. Pipeline started.",
+      message: "Document uploaded. Use /api/pipeline/{id}/step to run the pipeline.",
     });
   } catch (error) {
     console.error("[API /parse] Error:", error);
