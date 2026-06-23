@@ -41,6 +41,8 @@ function toParsedSection(row: Record<string, unknown>): ParsedSection {
     order: row.section_order as number,
     wordCount: row.word_count as number,
     charCount: row.char_count as number,
+    startLine: row.start_line as number || 0,
+    endLine: row.end_line as number || 0,
   };
 }
 
