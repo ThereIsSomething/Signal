@@ -99,6 +99,32 @@ async function logPipelineStep(
   });
 }
 
+
+/**
+ * Check if the pipeline was cancelled by the user.
+ */
+async function checkNotCancelled(documentId: string) {
+  const { data } = await supabase.from('documents').select('status').eq('id', documentId).single();
+  if (data?.status === 'failed') {
+    const error = new Error('Pipeline stopped by user');
+    error.name = 'PipelineStoppedError';
+    throw error;
+  }
+}
+
+
+/**
+ * Check if the pipeline was cancelled by the user.
+ */
+async function checkNotCancelled(documentId: string) {
+  const { data } = await supabase.from('documents').select('status').eq('id', documentId).single();
+  if (data?.status === 'failed') {
+    const error = new Error('Pipeline stopped by user');
+    error.name = 'PipelineStoppedError';
+    throw error;
+  }
+}
+
 /**
  * Update document status.
  */
@@ -135,6 +161,7 @@ export async function runPipeline(
 
   try {
     // ─── Step 1: Parse PDF to Markdown ───────────────────────────────
+    await checkNotCancelled(documentId);
     await updateDocumentStatus(documentId, "parsing");
     await logPipelineStep(documentId, "parse", "running");
     const parseStart = Date.now();
@@ -159,6 +186,7 @@ export async function runPipeline(
     });
 
     // ─── Step 2: Split into Sections ─────────────────────────────────
+    await checkNotCancelled(documentId);
     await updateDocumentStatus(documentId, "sectioning");
     await logPipelineStep(documentId, "section", "running");
 
@@ -197,6 +225,7 @@ export async function runPipeline(
     });
 
     // ─── Step 3: Extract Financial Metrics ────────────────────────────
+    await checkNotCancelled(documentId);
     await updateDocumentStatus(documentId, "extracting");
     await logPipelineStep(documentId, "extract_metrics", "running");
     const metricsStart = Date.now();
@@ -259,6 +288,7 @@ export async function runPipeline(
     });
 
     // ─── Step 4: Analyze Tone ────────────────────────────────────────
+    await checkNotCancelled(documentId);
     await updateDocumentStatus(documentId, "analyzing_tone");
     await logPipelineStep(documentId, "analyze_tone", "running");
     const toneStart = Date.now();
@@ -311,6 +341,7 @@ export async function runPipeline(
     });
 
     // ─── Step 5: Extract Risk Factors ────────────────────────────────
+    await checkNotCancelled(documentId);
     await updateDocumentStatus(documentId, "extracting_risks");
     await logPipelineStep(documentId, "extract_risks", "running");
     const risksStart = Date.now();
@@ -359,6 +390,7 @@ export async function runPipeline(
     });
 
     // ─── Step 6: Compare Risks Across Periods ────────────────────────
+    await checkNotCancelled(documentId);
     await logPipelineStep(documentId, "compare_risks", "running");
     const compareRisksStart = Date.now();
 
@@ -539,6 +571,7 @@ export async function runPipeline(
     });
 
     // ─── Step 7: Populate Competitor Benchmarks ───────────────────────
+    await checkNotCancelled(documentId);
     await logPipelineStep(documentId, "generate_embeddings", "running");
 
     try {
@@ -622,6 +655,7 @@ export async function runPipeline(
     await logPipelineStep(documentId, "generate_embeddings", "completed");
 
     // ─── Step 8: Generate Investment Memo ─────────────────────────────
+    await checkNotCancelled(documentId);
     await updateDocumentStatus(documentId, "generating_memo");
     await logPipelineStep(documentId, "generate_memo", "running");
     const memoStart = Date.now();

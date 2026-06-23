@@ -19,6 +19,7 @@ const DocumentViewer = dynamic(
   () => import("@/components/documents/document-viewer").then((mod) => mod.DocumentViewer),
   { ssr: false, loading: () => <div className="h-full flex items-center justify-center bg-surface-secondary text-text-tertiary text-sm">Loading Viewer...</div> }
 );
+import { FloatingLogs } from "@/components/documents/floating-logs";
 import {
   MessageSquare,
   AlertTriangle,
@@ -27,6 +28,7 @@ import {
   Download,
   FileText,
   X,
+  XCircle,
 } from "lucide-react";
 
 const TABS = [
@@ -148,6 +150,14 @@ export default function DocumentDetailPage() {
       };
       html2pdf.default().set(opt).from(element).save();
     });
+  };
+
+  const handleStopPipeline = async () => {
+    try {
+      await fetch(`/api/pipeline/${documentId}/stop`, { method: "POST" });
+    } catch (err) {
+      console.error("Failed to stop pipeline", err);
+    }
   };
 
   const pdfUrl = document?.file_path
@@ -589,8 +599,19 @@ export default function DocumentDetailPage() {
 
         {/* Pipeline Progress (when processing or failed) */}
         {(isProcessing || document?.status === "failed") && document && (
-          <div className="px-4 py-3 border-b border-border-default bg-surface-secondary">
-            <PipelineProgress status={document.status} />
+          <div className="px-4 py-3 border-b border-border-default bg-surface-secondary flex items-center justify-between">
+            <div className="flex-1">
+              <PipelineProgress status={document.status} />
+            </div>
+            {isProcessing && (
+              <button 
+                onClick={handleStopPipeline}
+                className="ml-4 flex items-center gap-2 px-3 py-1.5 text-[12px] font-medium bg-surface-primary border border-border-default hover:bg-accent-red/10 hover:text-accent-red hover:border-accent-red/30 rounded-md transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Stop Pipeline
+              </button>
+            )}
           </div>
         )}
 
@@ -644,6 +665,8 @@ export default function DocumentDetailPage() {
               )}
             </button>
           )}
+          
+          <FloatingLogs documentId={documentId} />
         </div>
       </div>
     </AppShell>
