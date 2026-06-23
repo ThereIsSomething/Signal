@@ -3,9 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const documentId = params.id;
+  const documentId = (await params).id;
 
   if (!documentId) {
     return NextResponse.json(
@@ -14,7 +14,7 @@ export async function POST(
     );
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
 
   try {
     const { error } = await supabase
