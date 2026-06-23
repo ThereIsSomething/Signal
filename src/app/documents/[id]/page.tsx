@@ -593,25 +593,23 @@ export default function DocumentDetailPage() {
               >
                 {document.status}
               </Badge>
+              {isProcessing && (
+                <button
+                  onClick={handleStopPipeline}
+                  className="p-1 rounded-md text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red transition-colors"
+                  title="Stop Pipeline"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              )}
             </>
           )}
         </div>
 
         {/* Pipeline Progress (when processing or failed) */}
         {(isProcessing || document?.status === "failed") && document && (
-          <div className="px-4 py-3 border-b border-border-default bg-surface-secondary flex items-center justify-between">
-            <div className="flex-1">
-              <PipelineProgress status={document.status} />
-            </div>
-            {isProcessing && (
-              <button 
-                onClick={handleStopPipeline}
-                className="ml-4 flex items-center gap-2 px-3 py-1.5 text-[12px] font-medium bg-surface-primary border border-border-default hover:bg-accent-red/10 hover:text-accent-red hover:border-accent-red/30 rounded-md transition-colors"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                Stop Pipeline
-              </button>
-            )}
+          <div className="px-4 py-3 border-b border-border-default bg-surface-secondary">
+            <PipelineProgress status={document.status} />
           </div>
         )}
 

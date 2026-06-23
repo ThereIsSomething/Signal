@@ -99,20 +99,6 @@ async function logPipelineStep(
   });
 }
 
-
-/**
- * Check if the pipeline was cancelled by the user.
- */
-async function checkNotCancelled(documentId: string) {
-  const { data } = await supabase.from('documents').select('status').eq('id', documentId).single();
-  if (data?.status === 'failed') {
-    const error = new Error('Pipeline stopped by user');
-    error.name = 'PipelineStoppedError';
-    throw error;
-  }
-}
-
-
 /**
  * Check if the pipeline was cancelled by the user.
  */
