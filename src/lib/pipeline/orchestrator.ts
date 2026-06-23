@@ -115,6 +115,24 @@ async function updateDocumentStatus(
     .eq("id", documentId);
 }
 
+async function heartbeatPipelineStep(documentId: string, step: PipelineStep) {
+  const now = new Date().toISOString();
+  console.log(`[Pipeline] Heartbeat ${step} for ${documentId} at ${now}`);
+  await supabase
+    .from("pipeline_runs")
+    .update({ metadata: { last_heartbeat_at: now } })
+    .eq("document_id", documentId)
+    .eq("step", step)
+    .eq("status", "running");
+}
+
+function startHeartbeat(documentId: string, step: PipelineStep, intervalMs = 15_000) {
+  const interval = setInterval(() => {
+    heartbeatPipelineStep(documentId, step).catch(() => {});
+  }, intervalMs);
+  return () => clearInterval(interval);
+}
+
 async function getDocument(documentId: string) {
   const { data } = await supabase
     .from("documents")
@@ -155,32 +173,37 @@ export async function runStepParse(documentId: string): Promise<void> {
 
   await updateDocumentStatus(documentId, "parsing");
   await logPipelineStep(documentId, "parse", "running");
+  const stopHeartbeat = startHeartbeat(documentId, "parse");
   const parseStart = Date.now();
 
-  const { data: fileData, error: dlError } = await supabase.storage
-    .from("documents")
-    .download(filePath);
-  if (dlError || !fileData) throw new Error(`Failed to download file from storage: ${dlError?.message}`);
-  const fileBuffer = Buffer.from(await fileData.arrayBuffer());
+  try {
+    const { data: fileData, error: dlError } = await supabase.storage
+      .from("documents")
+      .download(filePath);
+    if (dlError || !fileData) throw new Error(`Failed to download file from storage: ${dlError?.message}`);
+    const fileBuffer = Buffer.from(await fileData.arrayBuffer());
 
-  const { markdown, pages } = await parsePdfToMarkdown(fileBuffer, fileName, {
-    parsingInstructions:
-      "This is an SEC financial filing (10-K/10-Q) or earnings transcript. Preserve all table structures, numerical data, and section headers exactly.",
-  });
+    const { markdown, pages } = await parsePdfToMarkdown(fileBuffer, fileName, {
+      parsingInstructions:
+        "This is an SEC financial filing (10-K/10-Q) or earnings transcript. Preserve all table structures, numerical data, and section headers exactly.",
+    });
 
-  await supabase
-    .from("documents")
-    .update({
-      raw_markdown: markdown,
-      page_count: pages,
-      parse_duration_ms: Date.now() - parseStart,
-    })
-    .eq("id", documentId);
+    await supabase
+      .from("documents")
+      .update({
+        raw_markdown: markdown,
+        page_count: pages,
+        parse_duration_ms: Date.now() - parseStart,
+      })
+      .eq("id", documentId);
 
-  await logPipelineStep(documentId, "parse", "completed", {
-    durationMs: Date.now() - parseStart,
-    outputPreview: markdown,
-  });
+    await logPipelineStep(documentId, "parse", "completed", {
+      durationMs: Date.now() - parseStart,
+      outputPreview: markdown,
+    });
+  } finally {
+    stopHeartbeat();
+  }
 }
 
 // ─── Step 2: Section ─────────────────────────────────────────────
@@ -251,6 +274,7 @@ export async function runStepExtractMetrics(documentId: string): Promise<void> {
 
   await updateDocumentStatus(documentId, "extracting");
   await logPipelineStep(documentId, "extract_metrics", "running");
+  const stopHeartbeat = startHeartbeat(documentId, "extract_metrics");
   const metricsStart = Date.now();
 
   const financialSections = getFinancialSections(sections);
@@ -309,6 +333,7 @@ export async function runStepExtractMetrics(documentId: string): Promise<void> {
     outputTokens: metricsResponse.usage?.completion_tokens,
     outputPreview: JSON.stringify(metricsJson),
   });
+  stopHeartbeat();
 }
 
 // ─── Step 4: Analyze Tone ────────────────────────────────────────
@@ -332,6 +357,7 @@ export async function runStepAnalyzeTone(documentId: string): Promise<void> {
 
   await updateDocumentStatus(documentId, "analyzing_tone");
   await logPipelineStep(documentId, "analyze_tone", "running");
+  const stopHeartbeat = startHeartbeat(documentId, "analyze_tone");
   const toneStart = Date.now();
 
   const toneSections = getToneSections(sections);
@@ -375,6 +401,7 @@ export async function runStepAnalyzeTone(documentId: string): Promise<void> {
   await logPipelineStep(documentId, "analyze_tone", "completed", {
     durationMs: Date.now() - toneStart,
   });
+  stopHeartbeat();
 }
 
 // ─── Step 5: Extract Risks ───────────────────────────────────────
@@ -399,6 +426,7 @@ export async function runStepExtractRisks(documentId: string): Promise<void> {
 
   await updateDocumentStatus(documentId, "extracting_risks");
   await logPipelineStep(documentId, "extract_risks", "running");
+  const stopHeartbeat = startHeartbeat(documentId, "extract_risks");
   const risksStart = Date.now();
 
   const riskSections = getRiskSections(sections);
@@ -443,6 +471,7 @@ export async function runStepExtractRisks(documentId: string): Promise<void> {
     inputTokens: risksResponse.usage?.prompt_tokens,
     outputTokens: risksResponse.usage?.completion_tokens,
   });
+  stopHeartbeat();
 }
 
 // ─── Step 6: Compare Risks ───────────────────────────────────────
@@ -456,6 +485,7 @@ export async function runStepCompareRisks(documentId: string): Promise<void> {
   const fiscalYear = doc.fiscal_year as number;
 
   await logPipelineStep(documentId, "compare_risks", "running");
+  const stopHeartbeat = startHeartbeat(documentId, "compare_risks");
   const compareRisksStart = Date.now();
 
   const { data: priorDoc } = await supabase
@@ -622,6 +652,7 @@ export async function runStepCompareRisks(documentId: string): Promise<void> {
   await logPipelineStep(documentId, "compare_risks", "completed", {
     durationMs: Date.now() - compareRisksStart,
   });
+  stopHeartbeat();
 }
 
 // ─── Step 7: Benchmarks ─────────────────────────────────────────
@@ -732,6 +763,7 @@ export async function runStepGenerateMemo(documentId: string): Promise<void> {
 
   await updateDocumentStatus(documentId, "generating_memo");
   await logPipelineStep(documentId, "generate_memo", "running");
+  const stopHeartbeat = startHeartbeat(documentId, "generate_memo");
   const memoStart = Date.now();
 
   const { data: metricsRow } = await supabase
@@ -828,6 +860,7 @@ export async function runStepGenerateMemo(documentId: string): Promise<void> {
     inputTokens: memoResponse.usage?.prompt_tokens,
     outputTokens: memoResponse.usage?.completion_tokens,
   });
+  stopHeartbeat();
 }
 
 /**

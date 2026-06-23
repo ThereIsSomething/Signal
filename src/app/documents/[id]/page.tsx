@@ -57,7 +57,7 @@ export default function DocumentDetailPage() {
 
   const supabase = createClient();
 
-  const { driving: pipelineRunning, advance, resume } = usePipelineDriver(documentId);
+  const { driving: pipelineRunning, advance, resume, stepError, retryCount } = usePipelineDriver(documentId);
 
   useEffect(() => {
     async function fetchData() {
@@ -136,8 +136,9 @@ export default function DocumentDetailPage() {
   }, [documentId, supabase]);
 
   // Auto-advance pipeline when document is in a non-terminal state.
-  // Waits for document status to actually change (skip stale re-renders from pipelineRunning toggle).
+  // Retries on timeout/network errors with backoff.
   const lastDrivenStatus = useRef<string | null>(null);
+  const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!document?.status || document.status === "completed" || document.status === "failed") {
@@ -145,13 +146,63 @@ export default function DocumentDetailPage() {
       return;
     }
 
-    // Don't re-advance if the status hasn't meaningfully changed since our last advance
-    if (pipelineRunning || document.status === lastDrivenStatus.current) return;
+    if (pipelineRunning) return;
+
+    // Timeout/network-error retry: if status hasn't moved but we're not running, retry
+    if (stepError && document.status === lastDrivenStatus.current) {
+      const backoff = Math.min(5000 * Math.pow(2, retryCount), 60000);
+      console.log(`[PipelineDriver] Step error "${stepError}", retrying in ${backoff}ms (attempt ${retryCount + 1})`);
+      const timer = setTimeout(() => advance(), backoff);
+      return () => clearTimeout(timer);
+    }
+
+    // Normal advance: status changed since last drive
+    if (document.status === lastDrivenStatus.current) return;
 
     lastDrivenStatus.current = document.status;
     const timer = setTimeout(() => advance(), 2000);
     return () => clearTimeout(timer);
-  }, [document?.status, advance, pipelineRunning]);
+  }, [document?.status, advance, pipelineRunning, stepError, retryCount]);
+
+  // Stuck detection: if a step is "running" for > 5 minutes without completing, auto-retry
+  useEffect(() => {
+    if (!document?.status || document.status === "completed" || document.status === "failed") {
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
+      return;
+    }
+
+    stuckTimerRef.current = setTimeout(async () => {
+      const { data: runs } = await supabase
+        .from("pipeline_runs")
+        .select("step, status, started_at")
+        .eq("document_id", documentId)
+        .eq("status", "running")
+        .maybeSingle();
+
+      if (runs) {
+        const startedAt = new Date(runs.started_at).getTime();
+        const stuckMs = Date.now() - startedAt;
+        if (stuckMs > 300_000) {
+          console.warn(`[PipelineDriver] Step "${runs.step}" stuck for ${(stuckMs / 1000).toFixed(0)}s, marking failed and retrying`);
+          await supabase
+            .from("pipeline_runs")
+            .update({ status: "failed", error_message: "Timed out on serverless function" })
+            .eq("document_id", documentId)
+            .eq("step", runs.step)
+            .eq("status", "running");
+          await supabase
+            .from("documents")
+            .update({ status: "uploaded", error_message: null })
+            .eq("id", documentId);
+          advance();
+        }
+      }
+    }, 310_000);
+
+    return () => {
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
+    };
+  }, [document?.status, documentId, advance, supabase]);
 
   const isProcessing = document?.status !== "completed" && document?.status !== "failed";
 

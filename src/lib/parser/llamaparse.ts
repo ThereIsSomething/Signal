@@ -87,9 +87,10 @@ export async function parsePdfToMarkdown(
   const jobId = job.id;
 
   // 2. Poll for completion
-  const maxWaitMs = 190_000; // 5 minutes max (each HTTP call has its own 30s timeout)
+  const maxWaitMs = 190_000;
   const pollIntervalMs = 3_000;
   const startTime = Date.now();
+  let pollCount = 0;
 
   while (Date.now() - startTime < maxWaitMs) {
     const statusResponse = await fetchWithTimeout(
@@ -104,6 +105,12 @@ export async function parsePdfToMarkdown(
     }
 
     const statusData: LlamaParseJobResponse = await statusResponse.json();
+    pollCount++;
+
+    if (pollCount % 5 === 0 || statusData.status !== "PENDING") {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[LlamaParse] Job ${jobId} poll #${pollCount}: status=${statusData.status}, elapsed=${elapsed}s`);
+    }
 
     if (statusData.status === "SUCCESS") {
       break;
@@ -134,8 +141,10 @@ export async function parsePdfToMarkdown(
     } catch {
       // ignore – we're already failing
     }
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.error(`[LlamaParse] TIMEOUT Job ${jobId}: elapsed=${elapsed}s, lastStatus=${jobStatusAtTimeout ?? "unknown"}, polls=${pollCount}`);
     throw new Error(
-      `LlamaParse timed out after ${maxWaitMs}ms. Job ${jobId} status: ${jobStatusAtTimeout ?? "unknown"}`
+      `LlamaParse timed out after ${maxWaitMs}ms (${elapsed}s elapsed). Job ${jobId} last status: ${jobStatusAtTimeout ?? "unknown"}`
     );
   }
 

@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getNextStepToRun, runStepByName } from "@/lib/pipeline/orchestrator";
 import { PIPELINE_STEP_LABELS } from "@/lib/utils/constants";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function POST(
   request: NextRequest,

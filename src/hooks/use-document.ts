@@ -107,6 +107,19 @@ export function usePipelineStatus(documentId: string | null) {
   return { status, loading };
 }
 
+const FETCH_TIMEOUT_MS = 310_000; // just over the 300s Vercel limit
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Drives the pipeline step-by-step automatically.
  * Calls POST /api/pipeline/{documentId}/step whenever the document
@@ -116,6 +129,7 @@ export function usePipelineDriver(documentId: string | null) {
   const [driving, setDriving] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
   const drivingRef = useRef(false);
+  const retryCountRef = useRef(0);
   const supabase = createClient();
 
   const advance = useCallback(async () => {
@@ -124,13 +138,20 @@ export function usePipelineDriver(documentId: string | null) {
     setDriving(true);
     setStepError(null);
     try {
-      const res = await fetch(`/api/pipeline/${documentId}/step`, { method: "POST" });
+      const res = await fetchWithTimeout(`/api/pipeline/${documentId}/step`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Step failed");
+      retryCountRef.current = 0;
       return data;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Pipeline step failed";
-      setStepError(msg);
+      const isTimeout = e instanceof DOMException && e.name === "AbortError";
+      const isNetworkError = msg === "Failed to fetch" || msg.includes("network");
+      setStepError(isTimeout ? `Step timed out after ${FETCH_TIMEOUT_MS / 1000}s` : msg);
+      if (isTimeout || isNetworkError) {
+        retryCountRef.current++;
+        console.warn(`[PipelineDriver] ${isTimeout ? "Timeout" : "Network error"} on step advance (attempt ${retryCountRef.current}), will retry`);
+      }
       return null;
     } finally {
       drivingRef.current = false;
@@ -144,17 +165,19 @@ export function usePipelineDriver(documentId: string | null) {
     setDriving(true);
     setStepError(null);
     try {
-      const res = await fetch("/api/pipeline/resume", {
+      const res = await fetchWithTimeout("/api/pipeline/resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ documentId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Resume failed");
+      retryCountRef.current = 0;
       return data;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Resume failed";
-      setStepError(msg);
+      const isTimeout = e instanceof DOMException && e.name === "AbortError";
+      setStepError(isTimeout ? `Resume timed out after ${FETCH_TIMEOUT_MS / 1000}s` : msg);
       return null;
     } finally {
       drivingRef.current = false;
@@ -162,5 +185,5 @@ export function usePipelineDriver(documentId: string | null) {
     }
   }, [documentId]);
 
-  return { driving, stepError, advance, resume };
+  return { driving, stepError, advance, resume, retryCount: retryCountRef.current };
 }

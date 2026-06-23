@@ -36,6 +36,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Run all remaining steps sequentially in this request
+    // WARNING: On Vercel serverless this may hit the 300s timeout if steps are slow.
+    // Prefer step-by-step via POST /api/pipeline/{id}/step instead.
+    console.log(`[Pipeline Resume] Starting full pipeline for ${documentId} from step ${nextStep}`);
     await runPipeline(documentId);
 
     return NextResponse.json({ status: "completed", message: "Pipeline finished" });
