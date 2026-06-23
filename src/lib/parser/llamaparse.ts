@@ -16,19 +16,6 @@ interface LlamaParseResultResponse {
   job_metadata?: Record<string, unknown>;
 }
 
-const FETCH_TIMEOUT_MS = 30_000;
-
-async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 /**
  * Parse a PDF file using LlamaParse API.
  * Returns the Markdown output.
@@ -70,7 +57,7 @@ export async function parsePdfToMarkdown(
   // Use premium parsing mode for financial documents
   formData.append("premium_mode", "true");
 
-  const uploadResponse = await fetchWithTimeout(`${LLAMA_CLOUD_BASE_URL}/parsing/upload`, {
+  const uploadResponse = await fetch(`${LLAMA_CLOUD_BASE_URL}/parsing/upload`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -87,13 +74,12 @@ export async function parsePdfToMarkdown(
   const jobId = job.id;
 
   // 2. Poll for completion
-  const maxWaitMs = 190_000;
+  const maxWaitMs = 300_000; // 5 minutes max
   const pollIntervalMs = 3_000;
   const startTime = Date.now();
-  let pollCount = 0;
 
   while (Date.now() - startTime < maxWaitMs) {
-    const statusResponse = await fetchWithTimeout(
+    const statusResponse = await fetch(
       `${LLAMA_CLOUD_BASE_URL}/parsing/job/${jobId}`,
       {
         headers: { Authorization: `Bearer ${apiKey}` },
@@ -105,12 +91,6 @@ export async function parsePdfToMarkdown(
     }
 
     const statusData: LlamaParseJobResponse = await statusResponse.json();
-    pollCount++;
-
-    if (pollCount % 5 === 0 || statusData.status !== "PENDING") {
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[LlamaParse] Job ${jobId} poll #${pollCount}: status=${statusData.status}, elapsed=${elapsed}s`);
-    }
 
     if (statusData.status === "SUCCESS") {
       break;
@@ -124,32 +104,8 @@ export async function parsePdfToMarkdown(
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 
-  // 2b. Handle timeout of the polling loop
-  const timedOut = Date.now() - startTime >= maxWaitMs;
-  let jobStatusAtTimeout: string | undefined;
-  if (timedOut) {
-    // One last check to get the actual status before giving up
-    try {
-      const finalCheck = await fetchWithTimeout(
-        `${LLAMA_CLOUD_BASE_URL}/parsing/job/${jobId}`,
-        { headers: { Authorization: `Bearer ${apiKey}` } }
-      );
-      if (finalCheck.ok) {
-        const data: LlamaParseJobResponse = await finalCheck.json();
-        jobStatusAtTimeout = data.status;
-      }
-    } catch {
-      // ignore – we're already failing
-    }
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.error(`[LlamaParse] TIMEOUT Job ${jobId}: elapsed=${elapsed}s, lastStatus=${jobStatusAtTimeout ?? "unknown"}, polls=${pollCount}`);
-    throw new Error(
-      `LlamaParse timed out after ${maxWaitMs}ms (${elapsed}s elapsed). Job ${jobId} last status: ${jobStatusAtTimeout ?? "unknown"}`
-    );
-  }
-
   // 3. Retrieve result
-  const resultResponse = await fetchWithTimeout(
+  const resultResponse = await fetch(
     `${LLAMA_CLOUD_BASE_URL}/parsing/job/${jobId}/result/markdown`,
     {
       headers: { Authorization: `Bearer ${apiKey}` },

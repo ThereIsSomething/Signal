@@ -1,6 +1,11 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// Hook: useDocument
+// Client-side hook for fetching document data with realtime status updates
+// ═══════════════════════════════════════════════════════════════════════════════
+
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Document, DocumentStatus } from "@/lib/utils/types";
 
@@ -32,8 +37,10 @@ export function useDocument(documentId: string | null) {
   }, [documentId, supabase]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDocument();
 
+    // Subscribe to realtime status updates
     if (!documentId) return;
 
     const channel = supabase
@@ -68,10 +75,12 @@ export function usePipelineStatus(documentId: string | null) {
 
   useEffect(() => {
     if (!documentId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }
 
+    // Initial fetch
     supabase
       .from("documents")
       .select("status")
@@ -82,6 +91,7 @@ export function usePipelineStatus(documentId: string | null) {
         setLoading(false);
       });
 
+    // Realtime subscription
     const channel = supabase
       .channel(`pipeline-${documentId}`)
       .on(
@@ -105,85 +115,4 @@ export function usePipelineStatus(documentId: string | null) {
   }, [documentId, supabase]);
 
   return { status, loading };
-}
-
-const FETCH_TIMEOUT_MS = 310_000; // just over the 300s Vercel limit
-
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = FETCH_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-/**
- * Drives the pipeline step-by-step automatically.
- * Calls POST /api/pipeline/{documentId}/step whenever the document
- * is in a non-terminal state and no step is currently running.
- */
-export function usePipelineDriver(documentId: string | null) {
-  const [driving, setDriving] = useState(false);
-  const [stepError, setStepError] = useState<string | null>(null);
-  const drivingRef = useRef(false);
-  const retryCountRef = useRef(0);
-  const supabase = createClient();
-
-  const advance = useCallback(async () => {
-    if (!documentId || drivingRef.current) return;
-    drivingRef.current = true;
-    setDriving(true);
-    setStepError(null);
-    try {
-      const res = await fetchWithTimeout(`/api/pipeline/${documentId}/step`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Step failed");
-      retryCountRef.current = 0;
-      return data;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Pipeline step failed";
-      const isTimeout = e instanceof DOMException && e.name === "AbortError";
-      const isNetworkError = msg === "Failed to fetch" || msg.includes("network");
-      setStepError(isTimeout ? `Step timed out after ${FETCH_TIMEOUT_MS / 1000}s` : msg);
-      if (isTimeout || isNetworkError) {
-        retryCountRef.current++;
-        console.warn(`[PipelineDriver] ${isTimeout ? "Timeout" : "Network error"} on step advance (attempt ${retryCountRef.current}), will retry`);
-      }
-      return null;
-    } finally {
-      drivingRef.current = false;
-      setDriving(false);
-    }
-  }, [documentId]);
-
-  const resume = useCallback(async () => {
-    if (!documentId || drivingRef.current) return;
-    drivingRef.current = true;
-    setDriving(true);
-    setStepError(null);
-    try {
-      const res = await fetchWithTimeout("/api/pipeline/resume", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ documentId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Resume failed");
-      retryCountRef.current = 0;
-      return data;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Resume failed";
-      const isTimeout = e instanceof DOMException && e.name === "AbortError";
-      setStepError(isTimeout ? `Resume timed out after ${FETCH_TIMEOUT_MS / 1000}s` : msg);
-      return null;
-    } finally {
-      drivingRef.current = false;
-      setDriving(false);
-    }
-  }, [documentId]);
-
-  return { driving, stepError, advance, resume, retryCount: retryCountRef.current };
 }
