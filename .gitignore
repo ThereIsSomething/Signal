@@ -43,3 +43,10 @@ next-env.d.ts
 
 # antigravity
 .antigravitycli/
+viva_prep.aux
+.gitignore
+viva_prep.out
+viva_prep.tex
+viva_prep.log
+viva_prep.toc
+viva_prep.pdf
