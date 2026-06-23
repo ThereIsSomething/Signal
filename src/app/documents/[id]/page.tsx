@@ -57,7 +57,7 @@ export default function DocumentDetailPage() {
 
   const supabase = createClient();
 
-  const { driving: pipelineRunning, stepError, advance, resume } = usePipelineDriver(documentId);
+  const { driving: pipelineRunning, advance, resume } = usePipelineDriver(documentId);
 
   useEffect(() => {
     async function fetchData() {
