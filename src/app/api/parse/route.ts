@@ -3,7 +3,7 @@
 // Receives a PDF file, parses it via LlamaParse, and triggers the pipeline.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runPipeline } from "@/lib/pipeline/orchestrator";
 import {
@@ -106,17 +106,19 @@ export async function POST(request: NextRequest) {
     // 4. Run pipeline in background (non-blocking)
     // In production, this would use a job queue (e.g., BullMQ, Inngest)
     // For this project, we fire-and-forget on the server
-    runPipeline(
-      document.id,
-      fileBuffer,
-      file.name,
-      company.id,
-      companyName,
-      filingType,
-      fiscalYear,
-      fiscalQuarter
-    ).catch((err) => {
-      console.error("[API /parse] Pipeline error:", err);
+    after(() => {
+      runPipeline(
+        document.id,
+        fileBuffer,
+        file.name,
+        company.id,
+        companyName,
+        filingType,
+        fiscalYear,
+        fiscalQuarter
+      ).catch((err) => {
+        console.error("[API /parse] Pipeline error:", err);
+      });
     });
 
     return NextResponse.json({
