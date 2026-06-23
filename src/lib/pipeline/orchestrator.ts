@@ -138,6 +138,7 @@ export async function getNextStepToRun(documentId: string): Promise<PipelineStep
     const run = runs?.find((r) => r.step === step);
     if (!run) return step;
     if (run.status === "failed") return step;
+    if (run.status === "running") return step;
   }
   return null;
 }

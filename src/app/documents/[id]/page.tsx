@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { Tabs, TabPanel, useTabState } from "@/components/ui/tabs";
@@ -135,12 +135,22 @@ export default function DocumentDetailPage() {
     return () => { supabase.removeChannel(channel); };
   }, [documentId, supabase]);
 
-  // Auto-advance pipeline when document is in a non-terminal state
+  // Auto-advance pipeline when document is in a non-terminal state.
+  // Waits for document status to actually change (skip stale re-renders from pipelineRunning toggle).
+  const lastDrivenStatus = useRef<string | null>(null);
+
   useEffect(() => {
-    if (document?.status && document.status !== "completed" && document.status !== "failed" && !pipelineRunning) {
-      const timer = setTimeout(() => advance(), 2000);
-      return () => clearTimeout(timer);
+    if (!document?.status || document.status === "completed" || document.status === "failed") {
+      lastDrivenStatus.current = document?.status ?? null;
+      return;
     }
+
+    // Don't re-advance if the status hasn't meaningfully changed since our last advance
+    if (pipelineRunning || document.status === lastDrivenStatus.current) return;
+
+    lastDrivenStatus.current = document.status;
+    const timer = setTimeout(() => advance(), 2000);
+    return () => clearTimeout(timer);
   }, [document?.status, advance, pipelineRunning]);
 
   const isProcessing = document?.status !== "completed" && document?.status !== "failed";
